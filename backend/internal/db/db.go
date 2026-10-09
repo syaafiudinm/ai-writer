@@ -3,6 +3,7 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -15,6 +16,22 @@ import (
 
 // QueryTimeout adalah batas waktu satu query DB.
 const QueryTimeout = 5 * time.Second
+
+// ErrNotFound dikembalikan jika baris yang dicari tidak ada.
+var ErrNotFound = errors.New("db: data tidak ditemukan")
+
+// withTimeout membatasi satu query dengan QueryTimeout.
+func withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, QueryTimeout)
+}
+
+// nullable mengubah string kosong menjadi NULL.
+func nullable(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
+}
 
 // DB adalah titik masuk semua query. Method per tabel ada di file terpisah.
 type DB struct {
@@ -48,7 +65,7 @@ func (d *DB) Close() {
 
 // Ping mengecek koneksi dengan batas QueryTimeout.
 func (d *DB) Ping(ctx context.Context) error {
-	ctx, cancel := context.WithTimeout(ctx, QueryTimeout)
+	ctx, cancel := withTimeout(ctx)
 	defer cancel()
 	return d.Pool.Ping(ctx)
 }

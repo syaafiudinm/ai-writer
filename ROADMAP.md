@@ -3,6 +3,23 @@
 Checklist kerja per modul, diturunkan dari PRD Backend. Urutan mengikuti milestone M1–M5;
 satu modul = satu unit kerja yang bisa dites terpisah.
 
+## Perbedaan dari PRD
+
+| Area | PRD | Implementasi | Alasan |
+|---|---|---|---|
+| Provider AI | Anthropic Messages API | Gemini API (Google AI Studio) | Keputusan user. Env: `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_THINKING_LEVEL` |
+| Model default | `claude-sonnet-5-5` | `gemini-3.5-flash` + thinking `minimal` | `gemini-3.8-flash` sering 503 dan TTFT 4–20 dtk saat dites; thinking memakan jatah `maxOutputTokens` |
+| Interface | `anthropic.Request` | `gemini.Request` | Bentuk `Streamer` sama |
+| Kode error | `upstream_overloaded` saat 529 | 429 dan 5xx dari Gemini | Free tier cepat kena 429 |
+| Kode error baru | — | `content_blocked` (422 / event SSE) | Filter keamanan Gemini (`SAFETY`, dll.) |
+| `stop_reason` | `end_turn` | `stop`, `max_tokens`, … (finishReason Gemini, huruf kecil) | |
+| `output_tokens` | token output | teks + thinking | Thinking ditagih sebagai output |
+| Penanda fakta (en) | `[perlu konfirmasi]` | `[needs confirmation: ...]` untuk draf bahasa Inggris | Mengikuti bahasa draf |
+| Audit | login, aksi admin | + `login_rate_limited`, `logout` | |
+| Respons login/me | `{id, name, role}` | + `email` | |
+
+Catatan privasi: free tier Google AI Studio boleh memakai input untuk melatih model. Aktifkan billing sebelum dipakai dengan `facts` asli.
+
 ## M1 — Fondasi
 
 ### 1. Config — `internal/config/config.go`
@@ -31,70 +48,73 @@ satu modul = satu unit kerja yang bisa dites terpisah.
 ## M2 — Autentikasi
 
 ### 4. Query auth — `internal/db/users.go`, `sessions.go`, `audit_logs.go`
-- [ ] Users: get by email/id, create, update role/is_active/password, update `last_login_at`
-- [ ] Sessions: create, get by token hash (join user), delete, delete semua milik user
-- [ ] Audit logs: insert
+- [x] Users: get by email/id, create, update `last_login_at` (update role/is_active/password → M4)
+- [x] Sessions: create, get by token hash (join user), delete, delete semua milik user
+- [x] Audit logs: insert
 
 ### 5. Auth service — `internal/auth/service.go`
-- [ ] bcrypt cost 12, password minimal 8 karakter
-- [ ] Token sesi acak 32 byte; yang disimpan hanya hash SHA-256
-- [ ] Login: pesan gagal tidak membedakan email vs password salah
-- [ ] Logout / cabut sesi
+- [x] bcrypt cost 12, password minimal 8 karakter
+- [x] Token sesi acak 32 byte; yang disimpan hanya hash SHA-256
+- [x] Login: pesan gagal tidak membedakan email vs password salah
+- [x] Logout / cabut sesi
 
 ### 6. Middleware — `internal/auth/middleware.go`, `internal/api/middleware.go`
-- [ ] `RequireAuth`: sesi kedaluwarsa → 401; akun nonaktif → ditolak + sesi dicabut
-- [ ] `RequireRole("admin")` → 403
-- [ ] Cek header `X-Requested-With: fetch` untuk request yang mengubah data
-- [ ] Batas body 16 KB (`http.MaxBytesReader`) → 413
-- [ ] IP klien dari `X-Forwarded-For` hanya jika `TRUST_PROXY=true`
-- [ ] User id ikut tercatat di log request
+- [x] `RequireAuth`: sesi kedaluwarsa → 401; akun nonaktif → ditolak + sesi dicabut
+- [x] `RequireRole("admin")` → 403
+- [x] Cek header `X-Requested-With: fetch` untuk request yang mengubah data
+- [x] Batas body 16 KB (`http.MaxBytesReader`) → 413
+- [x] IP klien dari `X-Forwarded-For` hanya jika `TRUST_PROXY=true`
+- [x] User id ikut tercatat di log request
 
 ### 7. Rate limiter — `internal/ratelimit/limiter.go`
-- [ ] Sliding window in-memory
-- [ ] Login: 5 gagal / 15 menit per IP + email
-- [ ] Generate: `RATE_LIMIT_PER_MIN` per user
-- [ ] Lewat batas → 429 + header `Retry-After`
-- [ ] Unit test
+- [x] Sliding window in-memory
+- [x] Login: 5 gagal / 15 menit per IP + email
+- [x] Generate: `RATE_LIMIT_PER_MIN` per user (`Allow` siap; dipasang di handler M3)
+- [x] Lewat batas → 429 + header `Retry-After`
+- [x] Unit test
+- [x] Test integrasi semua AC M2 (`TEST_DATABASE_URL`, DB `aiwriter_test`)
 
 ### 8. Handler auth + seed — `internal/api/auth_handler.go`, `cmd/seed/main.go`
-- [ ] `POST /api/auth/login` → set cookie (`httpOnly`, `Secure`, `SameSite=Lax`), balas `{id, name, role}`
-- [ ] `POST /api/auth/logout`, `GET /api/auth/me`
-- [ ] Audit `login_success` / `login_failed`
-- [ ] Perintah seed membuat admin pertama
-- [ ] AC: tanpa cookie → 401; user biasa ke `/api/admin/*` → 403
-- [ ] AC: user dinonaktifkan → request berikutnya 401/403
-- [ ] AC: login gagal ke-6 dalam 15 menit → 429 dan tercatat di `audit_logs`
+- [x] `POST /api/auth/login` → set cookie (`httpOnly`, `Secure`, `SameSite=Lax`), balas `{id, name, role}`
+- [x] `POST /api/auth/logout`, `GET /api/auth/me`
+- [x] Audit `login_success` / `login_failed`
+- [x] Perintah seed membuat admin pertama
+- [x] AC: tanpa cookie → 401; user biasa ke `/api/admin/*` → 403
+- [x] AC: user dinonaktifkan → request berikutnya 401/403
+- [x] AC: login gagal ke-6 dalam 15 menit → 429 dan tercatat di `audit_logs`
 
-## M3 — Anthropic client & generate
+## M3 — Gemini client & generate
 
 ### 9. Request + validasi — `internal/generate/request.go`
-- [ ] Struct brief + default (`formal`, `sedang`, `id`)
-- [ ] Validasi wajib, enum, batas panjang; error per field
-- [ ] Table test
+- [x] Struct brief + default (`formal`, `sedang`, `id`)
+- [x] Validasi wajib, enum, batas panjang; error per field
+- [x] Table test
 
 ### 10. Prompt builder — `internal/generate/prompt.go`
-- [ ] System prompt berita vs artikel sesuai aturan konten
-- [ ] Input user dibungkus `<topik>`, `<kata_kunci>`, `<fakta>`
-- [ ] `max_tokens` per panjang (1.200 / 2.400 / 4.000)
-- [ ] Snapshot test
+- [x] System prompt berita vs artikel sesuai aturan konten
+- [x] Input user dibungkus `<topik>`, `<kata_kunci>`, `<fakta>`; tag palsu di input dinetralkan
+- [x] `max_tokens` per panjang (1.200 / 2.400 / 4.000) + ruang thinking jika aktif
+- [x] Snapshot test (`go test ./internal/generate -update` untuk memperbarui)
+- [ ] Tuning lanjutan saat QA M5: model masih sesekali menambah tujuan/opini di judul dan catatan "belum ada informasi" di badan berita
 
-### 11. Anthropic client — `internal/anthropic/`
-- [ ] Interface `Streamer`
-- [ ] Request ke Messages API dengan `stream: true`
-- [ ] Parser event SSE (`text_delta`, usage, `message_stop`, `error`)
-- [ ] Pemetaan error: 4xx/5xx sebelum stream → `upstream_error`; 529/`overloaded_error` → `upstream_overloaded`
-- [ ] Test dengan `httptest` server
+### 11. Gemini client — `internal/gemini/`
+- [x] Interface `Streamer`
+- [x] `streamGenerateContent?alt=sse`, key lewat header `x-goog-api-key`
+- [x] Parser SSE (teks, usage kumulatif, `finishReason`, `promptFeedback`, error di tengah stream)
+- [x] Pemetaan error: 429/5xx → `upstream_overloaded`; 4xx lain → `upstream_error`; filter keamanan → `content_blocked`
+- [x] Test dengan `httptest` server memakai bentuk chunk asli
 
 ### 12. SSE + handler generate — `internal/api/sse.go`, `generate_handler.go`, `internal/db/generation_logs.go`
-- [ ] Header SSE + `X-Accel-Buffering: no`, flush per chunk
-- [ ] Event `meta`, teks, `done`, `error`
-- [ ] Error sebelum stream → JSON; sesudahnya → event SSE
-- [ ] Timeout `GENERATE_TIMEOUT`; klien putus → context dibatalkan
-- [ ] Catat TTFT, durasi, token, status ke `generation_logs` (sukses/error/cancelled/timeout)
-- [ ] `facts` dan isi draf tidak disimpan maupun di-log
-- [ ] AC: input tidak valid → 400 tanpa memanggil Anthropic
-- [ ] AC: `curl -N` menampilkan teks bertahap, diakhiri `event: done`
-- [ ] Graceful shutdown dites dengan stream aktif (stream selesai + log tersimpan)
+- [x] Pasang rate limit generate per user (`ratelimit.Limiter.Allow`)
+- [x] Header SSE + `X-Accel-Buffering: no`, flush per chunk
+- [x] Event `meta`, teks, `done`, `error`
+- [x] Error sebelum teks pertama → JSON; sesudahnya → event SSE
+- [x] Timeout `GENERATE_TIMEOUT`; klien putus → context dibatalkan
+- [x] Catat TTFT, durasi, token, status ke `generation_logs` (sukses/error/cancelled/timeout)
+- [x] `facts` dan isi draf tidak disimpan maupun di-log
+- [x] AC: input tidak valid → 400 tanpa memanggil Gemini
+- [x] AC: `curl -N` menampilkan teks bertahap, diakhiri `event: done` (dites ke Gemini asli)
+- [x] Graceful shutdown dites dengan stream aktif (stream selesai + log tersimpan)
 
 ## M4 — API admin
 
@@ -108,6 +128,7 @@ satu modul = satu unit kerja yang bisa dites terpisah.
 - [ ] `GET /api/admin/logs` dengan filter + paginasi 50
 - [ ] `GET /api/admin/audit?action=&page=`
 - [ ] `GET` / `POST /api/admin/users`
+- [ ] Query DB: list users, update role/is_active/password_hash
 - [ ] `PATCH /api/admin/users/{id}`: role, is_active, password baru (cabut sesi saat nonaktif/reset)
 - [ ] Semua aksi admin tercatat di `audit_logs`
 

@@ -12,8 +12,11 @@ import (
 	"time"
 
 	"ai-writer/internal/api"
+	"ai-writer/internal/auth"
 	"ai-writer/internal/config"
 	"ai-writer/internal/db"
+	"ai-writer/internal/gemini"
+	"ai-writer/internal/ratelimit"
 )
 
 // shutdownTimeout memberi waktu stream yang masih aktif untuk selesai dan menyimpan log.
@@ -52,9 +55,25 @@ func run(logger *slog.Logger) error {
 		logger.Info("migrasi diterapkan", "version", r.Source.Version, "file", r.Source.Path, "duration", r.Duration.String())
 	}
 
+	// PRD: 5 percobaan login gagal per 15 menit per IP + email.
+	loginLimiter := ratelimit.New(5, 15*time.Minute)
+	go loginLimiter.RunCleanup(ctx, time.Minute)
+	generateLimiter := ratelimit.New(cfg.RateLimitPerMin, time.Minute)
+	go generateLimiter.RunCleanup(ctx, time.Minute)
+
+	handler := api.NewRouter(api.Deps{
+		Config:          cfg,
+		DB:              database,
+		Logger:          logger,
+		Auth:            auth.NewService(database, cfg.SessionTTL, logger),
+		LoginLimiter:    loginLimiter,
+		GenerateLimiter: generateLimiter,
+		Streamer:        gemini.New(cfg.GeminiAPIKey, cfg.GeminiModel),
+	})
+
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           api.NewRouter(api.Deps{Config: cfg, DB: database, Logger: logger}),
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		IdleTimeout:       120 * time.Second,
@@ -64,7 +83,7 @@ func run(logger *slog.Logger) error {
 
 	serveErr := make(chan error, 1)
 	go func() {
-		logger.Info("server berjalan", "addr", srv.Addr, "model", cfg.AnthropicModel)
+		logger.Info("server berjalan", "addr", srv.Addr, "model", cfg.GeminiModel, "thinking_level", cfg.GeminiThinkingLevel)
 		if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			serveErr <- err
 		}

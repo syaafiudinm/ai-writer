@@ -78,3 +78,30 @@ func TestMiddlewareChain(t *testing.T) {
 		}
 	})
 }
+
+func TestRemoteIP(t *testing.T) {
+	tests := []struct {
+		name  string
+		trust bool
+		xff   []string
+		want  string
+	}{
+		{"tanpa proxy abaikan XFF", false, []string{"9.9.9.9"}, "10.0.0.1"},
+		{"proxy: entri paling kanan", true, []string{"6.6.6.6, 203.0.113.7"}, "203.0.113.7"},
+		{"proxy: beberapa header", true, []string{"6.6.6.6", "203.0.113.8"}, "203.0.113.8"},
+		{"proxy: XFF sampah", true, []string{"bukan-ip"}, "10.0.0.1"},
+		{"proxy: tanpa XFF", true, nil, "10.0.0.1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := httptest.NewRequest("GET", "/", nil)
+			r.RemoteAddr = "10.0.0.1:5555"
+			for _, v := range tt.xff {
+				r.Header.Add("X-Forwarded-For", v)
+			}
+			if got := remoteIP(r, tt.trust); got != tt.want {
+				t.Errorf("remoteIP = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

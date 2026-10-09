@@ -12,9 +12,10 @@ import (
 
 // Config berisi seluruh konfigurasi server. Nilainya hanya berasal dari env.
 type Config struct {
-	AnthropicAPIKey string
-	AnthropicModel  string
-	DatabaseURL     string
+	GeminiAPIKey        string
+	GeminiModel         string
+	GeminiThinkingLevel string // minimal/low/medium/high; dukungan berbeda per model
+	DatabaseURL         string
 
 	PriceInputPerMTok  float64
 	PriceOutputPerMTok float64
@@ -40,22 +41,25 @@ func load(getenv func(string) string) (*Config, error) {
 	p := parser{getenv: getenv}
 
 	cfg := &Config{
-		AnthropicAPIKey:    p.required("ANTHROPIC_API_KEY"),
-		AnthropicModel:     p.str("ANTHROPIC_MODEL", "claude-sonnet-5-5"),
-		DatabaseURL:        p.required("DATABASE_URL"),
-		PriceInputPerMTok:  p.float("PRICE_INPUT_PER_MTOK", 0),
-		PriceOutputPerMTok: p.float("PRICE_OUTPUT_PER_MTOK", 0),
-		Port:               p.str("PORT", "8080"),
-		SessionTTL:         p.duration("SESSION_TTL", 168*time.Hour),
-		CookieSecure:       p.bool("COOKIE_SECURE", true),
-		RateLimitPerMin:    p.int("RATE_LIMIT_PER_MIN", 10),
-		GenerateTimeout:    p.duration("GENERATE_TIMEOUT", 180*time.Second),
-		LogRetentionDays:   p.int("LOG_RETENTION_DAYS", 180),
-		StaticDir:          p.str("STATIC_DIR", ""),
-		AllowedOrigin:      p.str("ALLOWED_ORIGIN", ""),
-		TrustProxy:         p.bool("TRUST_PROXY", false),
+		GeminiAPIKey:        p.required("GEMINI_API_KEY"),
+		GeminiModel:         p.str("GEMINI_MODEL", "gemini-3.5-flash"),
+		GeminiThinkingLevel: p.str("GEMINI_THINKING_LEVEL", "minimal"),
+		DatabaseURL:         p.required("DATABASE_URL"),
+		PriceInputPerMTok:   p.float("PRICE_INPUT_PER_MTOK", 0),
+		PriceOutputPerMTok:  p.float("PRICE_OUTPUT_PER_MTOK", 0),
+		Port:                p.str("PORT", "8080"),
+		SessionTTL:          p.duration("SESSION_TTL", 168*time.Hour),
+		CookieSecure:        p.bool("COOKIE_SECURE", true),
+		RateLimitPerMin:     p.int("RATE_LIMIT_PER_MIN", 10),
+		GenerateTimeout:     p.duration("GENERATE_TIMEOUT", 180*time.Second),
+		LogRetentionDays:    p.int("LOG_RETENTION_DAYS", 180),
+		StaticDir:           p.str("STATIC_DIR", ""),
+		AllowedOrigin:       p.str("ALLOWED_ORIGIN", ""),
+		TrustProxy:          p.bool("TRUST_PROXY", false),
 	}
 
+	p.check(validThinkingLevels[cfg.GeminiThinkingLevel],
+		"GEMINI_THINKING_LEVEL harus salah satu dari: minimal, low, medium, high")
 	p.check(cfg.PriceInputPerMTok >= 0, "PRICE_INPUT_PER_MTOK tidak boleh negatif")
 	p.check(cfg.PriceOutputPerMTok >= 0, "PRICE_OUTPUT_PER_MTOK tidak boleh negatif")
 	p.check(cfg.SessionTTL > 0, "SESSION_TTL harus lebih dari 0")
@@ -69,9 +73,11 @@ func load(getenv func(string) string) (*Config, error) {
 	return cfg, nil
 }
 
+var validThinkingLevels = map[string]bool{"minimal": true, "low": true, "medium": true, "high": true}
+
 // String menyensor rahasia agar Config aman jika tidak sengaja di-log.
 func (c Config) String() string {
-	c.AnthropicAPIKey = "[REDACTED]"
+	c.GeminiAPIKey = "[REDACTED]"
 	c.DatabaseURL = "[REDACTED]"
 	type plain Config // tipe tanpa method String, mencegah rekursi
 	return fmt.Sprintf("%+v", plain(c))

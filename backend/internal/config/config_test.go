@@ -12,8 +12,8 @@ func env(m map[string]string) func(string) string {
 
 func TestLoadDefaults(t *testing.T) {
 	cfg, err := load(env(map[string]string{
-		"ANTHROPIC_API_KEY": "sk-test",
-		"DATABASE_URL":      "postgres://localhost/db",
+		"GEMINI_API_KEY": "AIza-test",
+		"DATABASE_URL":   "postgres://localhost/db",
 	}))
 	if err != nil {
 		t.Fatalf("load: %v", err)
@@ -23,7 +23,8 @@ func TestLoadDefaults(t *testing.T) {
 		name      string
 		got, want any
 	}{
-		{"AnthropicModel", cfg.AnthropicModel, "claude-sonnet-5-5"},
+		{"GeminiModel", cfg.GeminiModel, "gemini-3.5-flash"},
+		{"GeminiThinkingLevel", cfg.GeminiThinkingLevel, "minimal"},
 		{"Port", cfg.Port, "8080"},
 		{"SessionTTL", cfg.SessionTTL, 168 * time.Hour},
 		{"CookieSecure", cfg.CookieSecure, true},
@@ -44,9 +45,10 @@ func TestLoadDefaults(t *testing.T) {
 
 func TestLoadOverrides(t *testing.T) {
 	cfg, err := load(env(map[string]string{
-		"ANTHROPIC_API_KEY":     "sk-test",
+		"GEMINI_API_KEY":        "AIza-test",
 		"DATABASE_URL":          "postgres://localhost/db",
-		"ANTHROPIC_MODEL":       "claude-haiku-5-5",
+		"GEMINI_MODEL":          "gemini-3.8-flash",
+		"GEMINI_THINKING_LEVEL": "low",
 		"PRICE_INPUT_PER_MTOK":  "3",
 		"PRICE_OUTPUT_PER_MTOK": "15.5",
 		"PORT":                  "9000",
@@ -59,7 +61,7 @@ func TestLoadOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if cfg.AnthropicModel != "claude-haiku-5-5" || cfg.Port != "9000" ||
+	if cfg.GeminiModel != "gemini-3.8-flash" || cfg.GeminiThinkingLevel != "low" || cfg.Port != "9000" ||
 		cfg.SessionTTL != 24*time.Hour || cfg.CookieSecure || cfg.RateLimitPerMin != 20 ||
 		cfg.GenerateTimeout != 90*time.Second || !cfg.TrustProxy ||
 		cfg.PriceInputPerMTok != 3 || cfg.PriceOutputPerMTok != 15.5 {
@@ -69,15 +71,17 @@ func TestLoadOverrides(t *testing.T) {
 
 func TestLoadCollectsAllErrors(t *testing.T) {
 	_, err := load(env(map[string]string{
-		"SESSION_TTL":        "seminggu",
-		"RATE_LIMIT_PER_MIN": "0",
-		"COOKIE_SECURE":      "ya",
+		"SESSION_TTL":           "seminggu",
+		"RATE_LIMIT_PER_MIN":    "0",
+		"COOKIE_SECURE":         "ya",
+		"GEMINI_THINKING_LEVEL": "tinggi",
 	}))
 	if err == nil {
 		t.Fatal("harusnya error")
 	}
 	for _, want := range []string{
-		"ANTHROPIC_API_KEY wajib diisi",
+		"GEMINI_API_KEY wajib diisi",
+		"GEMINI_THINKING_LEVEL harus salah satu dari",
 		"DATABASE_URL wajib diisi",
 		"SESSION_TTL harus berupa durasi",
 		"RATE_LIMIT_PER_MIN harus lebih dari 0",
@@ -90,9 +94,9 @@ func TestLoadCollectsAllErrors(t *testing.T) {
 }
 
 func TestStringRedactsSecrets(t *testing.T) {
-	cfg := Config{AnthropicAPIKey: "sk-rahasia", DatabaseURL: "postgres://app:pass@host/db"}
+	cfg := Config{GeminiAPIKey: "AIza-rahasia", DatabaseURL: "postgres://app:pass@host/db"}
 	s := cfg.String()
-	if strings.Contains(s, "sk-rahasia") || strings.Contains(s, "pass@host") {
+	if strings.Contains(s, "AIza-rahasia") || strings.Contains(s, "pass@host") {
 		t.Errorf("rahasia bocor: %s", s)
 	}
 }
