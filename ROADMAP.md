@@ -17,8 +17,8 @@ satu modul = satu unit kerja yang bisa dites terpisah.
 - [x] pgx pool + ping saat start
 - [x] `00001_init.sql`: `users`, `sessions`, `generation_logs`, `audit_logs` + index
 - [x] File SQL di-embed ke binary, goose jalan otomatis saat server start
-- [ ] `docker-compose.yml` dengan Postgres lokal (file sudah ada, belum dicoba: Docker daemon mati)
-- [x] Migrasi up/down dites ke Postgres lokal (Postgres 16 Homebrew)
+- [x] `docker-compose.yml` dengan Postgres 17 lokal (port host 5433)
+- [x] Migrasi up/down dites ke Postgres lokal (Docker Postgres 17)
 
 ### 3. Kerangka server — `cmd/server/main.go`, `internal/api/`
 - [x] `log/slog` JSON ke stdout
