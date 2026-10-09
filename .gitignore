@@ -1,0 +1,11 @@
+.env
+*.local
+
+# Go
+/backend/bin/
+
+# Frontend
+node_modules/
+/frontend/dist/
+
+.DS_Store
