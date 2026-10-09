@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"ai-writer/internal/admin"
 	"ai-writer/internal/auth"
 	"ai-writer/internal/config"
 	"ai-writer/internal/db"
@@ -22,6 +23,7 @@ type Deps struct {
 	LoginLimiter    *ratelimit.Limiter
 	GenerateLimiter *ratelimit.Limiter
 	Streamer        gemini.Streamer
+	Admin           *admin.Service
 }
 
 // NewRouter mendaftarkan semua route beserta middleware global.
@@ -51,6 +53,8 @@ func NewRouter(d Deps) http.Handler {
 		logger:        d.Logger,
 	}
 
+	adm := &adminHandler{svc: d.Admin, auth: d.Auth, db: d.DB, loc: d.Config.Location, logger: d.Logger}
+
 	mux := http.NewServeMux()
 	mux.Handle("GET /api/health", healthHandler(d.DB, d.Config.GeminiModel, d.Logger))
 
@@ -60,13 +64,17 @@ func NewRouter(d Deps) http.Handler {
 
 	mux.Handle("POST /api/generate", requireUser(http.HandlerFunc(gh.generate)))
 
-	// Placeholder sampai M4; sudah dilindungi auth agar aturan aksesnya bisa dites.
-	mux.Handle("/api/admin/", requireAdmin(http.HandlerFunc(notImplemented)))
+	mux.Handle("GET /api/admin/stats", requireAdmin(http.HandlerFunc(adm.stats)))
+	mux.Handle("GET /api/admin/logs", requireAdmin(http.HandlerFunc(adm.logs)))
+	mux.Handle("GET /api/admin/audit", requireAdmin(http.HandlerFunc(adm.audit)))
+	mux.Handle("GET /api/admin/users", requireAdmin(http.HandlerFunc(adm.listUsers)))
+	mux.Handle("POST /api/admin/users", requireAdmin(http.HandlerFunc(adm.createUser)))
+	mux.Handle("PATCH /api/admin/users/{id}", requireAdmin(http.HandlerFunc(adm.updateUser)))
+	// Path admin lain tetap lewat cek admin dulu agar keberadaan endpoint tidak bocor.
+	mux.Handle("/api/admin/", requireAdmin(http.HandlerFunc(notFound)))
 
 	// Path /api/* yang tidak terdaftar dibalas JSON, bukan halaman 404 bawaan.
-	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
-		writeError(w, http.StatusNotFound, "not_found", "Endpoint tidak ditemukan.")
-	})
+	mux.HandleFunc("/api/", notFound)
 
 	return chain(mux,
 		requestID,
@@ -78,6 +86,6 @@ func NewRouter(d Deps) http.Handler {
 	)
 }
 
-func notImplemented(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotImplemented, "not_implemented", "Fitur belum tersedia.")
+func notFound(w http.ResponseWriter, r *http.Request) {
+	writeError(w, http.StatusNotFound, "not_found", "Endpoint tidak ditemukan.")
 }

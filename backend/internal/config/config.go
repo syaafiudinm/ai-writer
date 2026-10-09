@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	_ "time/tzdata" // database zona waktu ikut di binary (image distroless tidak punya)
 )
 
 // Config berisi seluruh konfigurasi server. Nilainya hanya berasal dari env.
@@ -29,6 +30,8 @@ type Config struct {
 	StaticDir        string
 	AllowedOrigin    string
 	TrustProxy       bool
+	Timezone         string         // zona waktu pembagian hari di dashboard admin
+	Location         *time.Location // hasil load Timezone
 }
 
 // Load membaca konfigurasi dari environment proses.
@@ -56,7 +59,12 @@ func load(getenv func(string) string) (*Config, error) {
 		StaticDir:           p.str("STATIC_DIR", ""),
 		AllowedOrigin:       p.str("ALLOWED_ORIGIN", ""),
 		TrustProxy:          p.bool("TRUST_PROXY", false),
+		Timezone:            p.str("TIMEZONE", "Asia/Makassar"),
 	}
+
+	loc, err := time.LoadLocation(cfg.Timezone)
+	p.check(err == nil, "TIMEZONE tidak dikenal, contoh: Asia/Jakarta, Asia/Makassar, Asia/Jayapura")
+	cfg.Location = loc
 
 	p.check(validThinkingLevels[cfg.GeminiThinkingLevel],
 		"GEMINI_THINKING_LEVEL harus salah satu dari: minimal, low, medium, high")

@@ -34,6 +34,8 @@ func TestLoadDefaults(t *testing.T) {
 		{"StaticDir", cfg.StaticDir, ""},
 		{"AllowedOrigin", cfg.AllowedOrigin, ""},
 		{"TrustProxy", cfg.TrustProxy, false},
+		{"Timezone", cfg.Timezone, "Asia/Makassar"},
+		{"Location", cfg.Location.String(), "Asia/Makassar"},
 		{"PriceInputPerMTok", cfg.PriceInputPerMTok, 0.0},
 	}
 	for _, c := range checks {
@@ -75,6 +77,7 @@ func TestLoadCollectsAllErrors(t *testing.T) {
 		"RATE_LIMIT_PER_MIN":    "0",
 		"COOKIE_SECURE":         "ya",
 		"GEMINI_THINKING_LEVEL": "tinggi",
+		"TIMEZONE":              "Indonesia/Makassar",
 	}))
 	if err == nil {
 		t.Fatal("harusnya error")
@@ -82,6 +85,7 @@ func TestLoadCollectsAllErrors(t *testing.T) {
 	for _, want := range []string{
 		"GEMINI_API_KEY wajib diisi",
 		"GEMINI_THINKING_LEVEL harus salah satu dari",
+		"TIMEZONE tidak dikenal",
 		"DATABASE_URL wajib diisi",
 		"SESSION_TTL harus berupa durasi",
 		"RATE_LIMIT_PER_MIN harus lebih dari 0",

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"ai-writer/internal/admin"
 	"ai-writer/internal/auth"
 	"ai-writer/internal/config"
 	"ai-writer/internal/db"
@@ -131,13 +132,14 @@ func countRows(t *testing.T, d *db.DB, query string, args ...any) int {
 
 func TestAuthFlow(t *testing.T) {
 	d := testDB(t)
-	cfg := &config.Config{GeminiModel: "test-model", SessionTTL: time.Hour, CookieSecure: true}
+	cfg := &config.Config{GeminiModel: "test-model", SessionTTL: time.Hour, CookieSecure: true, Location: time.UTC}
 	srv := httptest.NewServer(NewRouter(Deps{
 		Config:       cfg,
 		DB:           d,
 		Logger:       discard,
 		Auth:         auth.NewService(d, cfg.SessionTTL, discard),
 		LoginLimiter: ratelimit.New(5, 15*time.Minute),
+		Admin:        admin.NewService(d, 0, 0, time.UTC),
 	}))
 	t.Cleanup(srv.Close)
 
@@ -202,7 +204,7 @@ func TestAuthFlow(t *testing.T) {
 		c := testClient{t, srv}
 		ck, r := c.login("admin@test.com", "password-admin")
 		c.expect(r, 200, "")
-		c.expect(c.do("GET", "/api/admin/stats", "", ck), 501, "not_implemented")
+		c.expect(c.do("GET", "/api/admin/stats", "", ck), 200, "")
 	})
 
 	t.Run("CSRF: tanpa X-Requested-With → 403", func(t *testing.T) {

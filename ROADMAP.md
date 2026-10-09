@@ -17,6 +17,10 @@ satu modul = satu unit kerja yang bisa dites terpisah.
 | Penanda fakta (en) | `[perlu konfirmasi]` | `[needs confirmation: ...]` untuk draf bahasa Inggris | Mengikuti bahasa draf |
 | Audit | login, aksi admin | + `login_rate_limited`, `logout` | |
 | Respons login/me | `{id, name, role}` | + `email` | |
+| Env baru | — | `TIMEZONE` (default `Asia/Makassar`) | Batas "hari" di statistik harian |
+| Kode error baru | — | 409 `email_taken`, `self_lockout`, `last_admin`; 404 `not_found` | Kelola user |
+| Audit baru | `user_created`, `user_disabled`, … | + `user_enabled`, `user_role_changed`, `user_password_reset` | |
+| Statistik | jumlah, user aktif, token, biaya, error rate, durasi | + `p50_ttft_ms`, `by_status`; error rate = (error + timeout) / total | Metrik keberhasilan PRD (TTFT p50, ≥ 98% tanpa error) |
 
 Catatan privasi: free tier Google AI Studio boleh memakai input untuk melatih model. Aktifkan billing sebelum dipakai dengan `facts` asli.
 
@@ -119,18 +123,21 @@ Catatan privasi: free tier Google AI Studio boleh memakai input untuk melatih mo
 ## M4 — API admin
 
 ### 13. Statistik — `internal/admin/stats.go`
-- [ ] Ringkasan + deret harian: generate, user aktif, token in/out, estimasi biaya, error rate, rata-rata durasi
-- [ ] Biaya dihitung saat query dari `PRICE_*_PER_MTOK`
-- [ ] AC: angka 30 hari cocok dengan hitungan manual
+- [x] Ringkasan + deret harian: generate, user aktif, token in/out, estimasi biaya, error rate, rata-rata durasi, p50 TTFT
+- [x] Biaya dihitung saat query dari `PRICE_*_PER_MTOK`
+- [x] Hari dibagi menurut `TIMEZONE`; hari tanpa data tetap muncul (nilai 0)
+- [x] AC: angka 30 hari cocok dengan hitungan manual (test dengan data di batas tengah malam WITA)
+- [x] PRD performa: 60.000 log (30 hari) → stats 61 ms, logs 19 ms (target ≤ 1 detik)
 
-### 14. Handler admin — `internal/api/admin_handler.go`
-- [ ] `GET /api/admin/stats?from=&to=`
-- [ ] `GET /api/admin/logs` dengan filter + paginasi 50
-- [ ] `GET /api/admin/audit?action=&page=`
-- [ ] `GET` / `POST /api/admin/users`
-- [ ] Query DB: list users, update role/is_active/password_hash
-- [ ] `PATCH /api/admin/users/{id}`: role, is_active, password baru (cabut sesi saat nonaktif/reset)
-- [ ] Semua aksi admin tercatat di `audit_logs`
+### 14. Handler admin — `internal/api/admin_handler.go`, `internal/admin/logs.go`
+- [x] `GET /api/admin/stats?from=&to=`
+- [x] `GET /api/admin/logs` dengan filter (`user_id`, `status`, `type`, `from`, `to`) + paginasi 50
+- [x] `GET /api/admin/audit?action=&page=`
+- [x] `GET` / `POST /api/admin/users`
+- [x] Query DB: list users, update role/is_active/password_hash dalam satu transaksi
+- [x] `PATCH /api/admin/users/{id}`: role, is_active, password baru (cabut sesi saat nonaktif/reset)
+- [x] Pengaman: tidak bisa menurunkan/menonaktifkan diri sendiri; minimal satu admin aktif
+- [x] Semua aksi admin tercatat di `audit_logs`
 
 ## M5 — Siap deploy
 

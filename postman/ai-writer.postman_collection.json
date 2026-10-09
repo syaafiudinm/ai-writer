@@ -32,6 +32,18 @@
     {
       "key": "lastDraft",
       "value": ""
+    },
+    {
+      "key": "newUserEmail",
+      "value": ""
+    },
+    {
+      "key": "newUserPassword",
+      "value": "password-penulis-1"
+    },
+    {
+      "key": "newUserId",
+      "value": ""
     }
   ],
   "item": [
@@ -485,11 +497,11 @@
       ]
     },
     {
-      "name": "Admin (placeholder M4)",
-      "description": "Sudah dilindungi auth (admin saja) tetapi isinya belum dibuat, jadi membalas 501. Role user → 403.",
+      "name": "Admin",
+      "description": "Semua endpoint admin (role admin saja; user → 403, tanpa sesi → 401). Jalankan setelah **Auth / Login** dengan akun admin.",
       "item": [
         {
-          "name": "Admin stats (placeholder)",
+          "name": "Stats (30 hari terakhir)",
           "request": {
             "method": "GET",
             "header": [],
@@ -504,7 +516,7 @@
                 "stats"
               ]
             },
-            "description": "Akses: admin saja. Tanpa sesi → 401; role user → 403. Diisi di M4."
+            "description": "Query opsional `from`, `to` (YYYY-MM-DD, inklusif; default 30 hari terakhir sampai hari ini; maks 366 hari).\n\nBalasan: `range` (from, to, timezone), `pricing` (dari `PRICE_*_PER_MTOK`; `configured=false` jika belum diisi → biaya 0), `summary` (generations, active_users, input/output_tokens, estimated_cost_usd, error_rate = (error+timeout)/total, avg_duration_ms & p50_ttft_ms dari generate sukses, by_status), dan `daily` (satu baris per hari, termasuk hari kosong)."
           },
           "event": [
             {
@@ -512,8 +524,979 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"status 501\", () => pm.response.to.have.status(501));",
-                  "pm.test(\"code = not_implemented\", () => pm.expect(pm.response.json().code).to.eql(\"not_implemented\"));"
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"ringkasan & deret harian\", () => { pm.expect(b.summary).to.include.keys(\"generations\", \"active_users\", \"input_tokens\", \"output_tokens\", \"estimated_cost_usd\", \"error_rate\", \"avg_duration_ms\", \"p50_ttft_ms\", \"by_status\"); pm.expect(b.daily).to.have.lengthOf(30); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Stats — rentang tertentu",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/stats?from=2026-10-01&to=2026-10-07",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "stats"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "2026-10-01"
+                },
+                {
+                  "key": "to",
+                  "value": "2026-10-07"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"7 hari\", () => pm.expect(pm.response.json().daily).to.have.lengthOf(7));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Stats — rentang tidak valid (400)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/stats?from=2026-10-07&to=2026-10-01",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "stats"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "2026-10-07"
+                },
+                {
+                  "key": "to",
+                  "value": "2026-10-01"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"code = invalid_input\", () => pm.expect(pm.response.json().code).to.eql(\"invalid_input\"));",
+                  "pm.test(\"field from\", () => pm.expect(pm.response.json().fields).to.have.property(\"from\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/logs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "logs"
+              ]
+            },
+            "description": "Log generate terbaru dulu. Filter opsional: `user_id` (UUID), `status` (success/error/cancelled/timeout), `type` (berita/artikel), `from`, `to` (YYYY-MM-DD), `page`.\n\nSetiap item: user {id,email,name}, parameter brief (tanpa facts), model, status, error_code, token, estimated_cost_usd, ttft_ms, duration_ms, ip.\n\nPaginasi 50 per halaman: `{items, page, page_size, total, total_pages}`. Waktu dalam zona `TIMEZONE`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"format halaman\", () => { pm.expect(b.items).to.be.an(\"array\"); pm.expect(b).to.include.keys(\"page\", \"page_size\", \"total\", \"total_pages\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logs — filter",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/logs?status=success&type=berita&page=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "logs"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "success"
+                },
+                {
+                  "key": "type",
+                  "value": "berita"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"format halaman\", () => { pm.expect(b.items).to.be.an(\"array\"); pm.expect(b).to.include.keys(\"page\", \"page_size\", \"total\", \"total_pages\"); });",
+                  "pm.test(\"semua sukses & berita\", () => b.items.forEach(i => { pm.expect(i.status).to.eql(\"success\"); pm.expect(i.type).to.eql(\"berita\"); }));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logs — filter tidak valid (400)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/logs?user_id=bukan-uuid&status=gagal&page=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "logs"
+              ],
+              "query": [
+                {
+                  "key": "user_id",
+                  "value": "bukan-uuid"
+                },
+                {
+                  "key": "status",
+                  "value": "gagal"
+                },
+                {
+                  "key": "page",
+                  "value": "0"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"code = invalid_input\", () => pm.expect(pm.response.json().code).to.eql(\"invalid_input\"));",
+                  "pm.test(\"detail per field\", () => pm.expect(pm.response.json().fields).to.include.keys(\"user_id\", \"status\", \"page\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Audit",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/audit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "audit"
+              ]
+            },
+            "description": "Jejak login dan aksi admin, terbaru dulu. Filter opsional `action`, `page`.\n\nAction: login_success, login_failed (metadata.reason: unknown_email / wrong_password / inactive), login_rate_limited, logout, user_created, user_role_changed (metadata from/to), user_disabled, user_enabled, user_password_reset.\n\n`actor`/`target` berisi {id,email,name} atau null.\n\nPaginasi 50 per halaman: `{items, page, page_size, total, total_pages}`. Waktu dalam zona `TIMEZONE`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"format halaman\", () => { pm.expect(b.items).to.be.an(\"array\"); pm.expect(b).to.include.keys(\"page\", \"page_size\", \"total\", \"total_pages\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Audit — filter action",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/audit?action=login_success",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "audit"
+              ],
+              "query": [
+                {
+                  "key": "action",
+                  "value": "login_success"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"format halaman\", () => { pm.expect(b.items).to.be.an(\"array\"); pm.expect(b).to.include.keys(\"page\", \"page_size\", \"total\", \"total_pages\"); });",
+                  "pm.test(\"hanya login_success\", () => b.items.forEach(i => pm.expect(i.action).to.eql(\"login_success\")));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Users — daftar",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users"
+              ]
+            },
+            "description": "Semua akun: `{items: [{id, email, name, role, is_active, created_at, last_login_at}]}`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"ada items\", () => pm.expect(pm.response.json().items).to.be.an(\"array\").that.is.not.empty);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Users — buat",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Requested-With",
+                "value": "fetch"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users"
+              ]
+            },
+            "description": "Body: `email`, `name` (1–100 karakter), `password` (min 8 karakter), `role` (admin/user, default user). Email unik per run dibuat otomatis.\n\nError: 400 `invalid_input` (fields), 409 `email_taken`. Tercatat di audit `user_created`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{newUserEmail}}\",\n  \"name\": \"Penulis Uji\",\n  \"password\": \"{{newUserPassword}}\",\n  \"role\": \"user\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"newUserEmail\", `penulis-${Date.now()}@contoh.com`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 201\", () => pm.response.to.have.status(201));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"role user & aktif\", () => { pm.expect(b.role).to.eql(\"user\"); pm.expect(b.is_active).to.be.true; });",
+                  "pm.collectionVariables.set(\"newUserId\", b.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Users — buat duplikat (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Requested-With",
+                "value": "fetch"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{newUserEmail}}\",\n  \"name\": \"Duplikat\",\n  \"password\": \"{{newUserPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 409\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"code = email_taken\", () => pm.expect(pm.response.json().code).to.eql(\"email_taken\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Users — buat tidak valid (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Requested-With",
+                "value": "fetch"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"bukan-email\",\n  \"name\": \"\",\n  \"password\": \"pendek\",\n  \"role\": \"editor\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"code = invalid_input\", () => pm.expect(pm.response.json().code).to.eql(\"invalid_input\"));",
+                  "pm.test(\"detail per field\", () => pm.expect(pm.response.json().fields).to.include.keys(\"email\", \"name\", \"password\", \"role\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Users — jadikan admin",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Requested-With",
+                "value": "fetch"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{newUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{newUserId}}"
+              ]
+            },
+            "description": "Body berisi minimal satu dari: `role` (admin/user), `is_active` (bool), `password` (min 8 karakter).\n\nMenonaktifkan atau reset password langsung mencabut semua sesi user tersebut. Perubahan role berlaku di request berikutnya tanpa login ulang.\n\nError: 400 `invalid_input`, 404 `not_found`, 409 `self_lockout` (menurunkan/menonaktifkan diri sendiri), 409 `last_admin`.\n\nAudit: user_role_changed, user_disabled, user_enabled, user_password_reset.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"admin\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"role admin\", () => pm.expect(pm.response.json().role).to.eql(\"admin\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Users — kembalikan ke user",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Requested-With",
+                "value": "fetch"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{newUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{newUserId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"user\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"role user\", () => pm.expect(pm.response.json().role).to.eql(\"user\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Users — nonaktifkan",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Requested-With",
+                "value": "fetch"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{newUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{newUserId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_active\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"nonaktif\", () => pm.expect(pm.response.json().is_active).to.be.false);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Users — aktifkan lagi",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Requested-With",
+                "value": "fetch"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{newUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{newUserId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"aktif\", () => pm.expect(pm.response.json().is_active).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Users — reset password",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Requested-With",
+                "value": "fetch"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{newUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{newUserId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"{{newUserPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Users — turunkan diri sendiri (409)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Requested-With",
+                "value": "fetch"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{userId}}"
+              ]
+            },
+            "description": "`userId` = admin yang sedang login (diisi request Auth / Login).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"user\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 409\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"code = self_lockout\", () => pm.expect(pm.response.json().code).to.eql(\"self_lockout\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Users — tanpa field (400)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Requested-With",
+                "value": "fetch"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{newUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{newUserId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"code = invalid_input\", () => pm.expect(pm.response.json().code).to.eql(\"invalid_input\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Users — id tidak ada (404)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Requested-With",
+                "value": "fetch"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/00000000-0000-0000-0000-000000000000",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "00000000-0000-0000-0000-000000000000"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"user\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"code = not_found\", () => pm.expect(pm.response.json().code).to.eql(\"not_found\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Akses role user",
+      "description": "Login sebagai user yang dibuat di folder Admin, lalu pastikan endpoint admin ditolak.",
+      "item": [
+        {
+          "name": "Login sebagai user baru",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Requested-With",
+                "value": "fetch"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Mengganti cookie sesi di Postman dengan sesi user biasa (sesi admin tertimpa).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{newUserEmail}}\",\n  \"password\": \"{{newUserPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"role user\", () => pm.expect(pm.response.json().role).to.eql(\"user\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin stats sebagai user (403)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "stats"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 403\", () => pm.response.to.have.status(403));",
+                  "pm.test(\"code = forbidden\", () => pm.expect(pm.response.json().code).to.eql(\"forbidden\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Users sebagai user (403)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 403\", () => pm.response.to.have.status(403));",
+                  "pm.test(\"code = forbidden\", () => pm.expect(pm.response.json().code).to.eql(\"forbidden\"));"
                 ]
               }
             }

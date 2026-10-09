@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"ai-writer/internal/admin"
 	"ai-writer/internal/api"
 	"ai-writer/internal/auth"
 	"ai-writer/internal/config"
@@ -69,6 +70,7 @@ func run(logger *slog.Logger) error {
 		LoginLimiter:    loginLimiter,
 		GenerateLimiter: generateLimiter,
 		Streamer:        gemini.New(cfg.GeminiAPIKey, cfg.GeminiModel),
+		Admin:           admin.NewService(database, cfg.PriceInputPerMTok, cfg.PriceOutputPerMTok, cfg.Location),
 	})
 
 	srv := &http.Server{

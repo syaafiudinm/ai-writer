@@ -9,6 +9,10 @@ const (
 	AuditLoginRateLimited = "login_rate_limited"
 	AuditLogout           = "logout"
 	AuditUserCreated      = "user_created"
+	AuditUserRoleChanged  = "user_role_changed"
+	AuditUserDisabled     = "user_disabled"
+	AuditUserEnabled      = "user_enabled"
+	AuditUserPasswordSet  = "user_password_reset"
 )
 
 type AuditEntry struct {

@@ -90,3 +90,88 @@ func (d *DB) TouchLastLogin(ctx context.Context, id string) error {
 	_, err := d.Pool.Exec(ctx, `UPDATE users SET last_login_at = now() WHERE id = $1`, id)
 	return err
 }
+
+// ErrLastAdmin dikembalikan jika perubahan akan menyisakan nol admin aktif.
+var ErrLastAdmin = errors.New("db: harus ada minimal satu admin aktif")
+
+func (d *DB) ListUsers(ctx context.Context) ([]User, error) {
+	ctx, cancel := withTimeout(ctx)
+	defer cancel()
+	rows, err := d.Pool.Query(ctx, `SELECT `+userColumns("")+` FROM users ORDER BY created_at, email`)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (User, error) {
+		u, err := scanUser(row)
+		if err != nil {
+			return User{}, err
+		}
+		return *u, nil
+	})
+}
+
+// UserUpdate berisi field yang diubah; nil = tidak diubah.
+type UserUpdate struct {
+	Role         *string
+	IsActive     *bool
+	PasswordHash *string
+}
+
+// UpdateUser mengubah user dalam satu transaksi dan mengembalikan kondisi
+// sebelum dan sesudahnya. Sesi user dicabut jika dinonaktifkan atau password
+// diganti. Menolak perubahan yang menyisakan nol admin aktif.
+func (d *DB) UpdateUser(ctx context.Context, id string, upd UserUpdate) (before, after *User, err error) {
+	ctx, cancel := withTimeout(ctx)
+	defer cancel()
+
+	tx, err := d.Pool.Begin(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	before, err = scanUser(tx.QueryRow(ctx,
+		`SELECT `+userColumns("")+` FROM users WHERE id = $1 FOR UPDATE`, id))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	stillAdmin := (upd.Role == nil || *upd.Role == RoleAdmin) && (upd.IsActive == nil || *upd.IsActive)
+	if before.Role == RoleAdmin && before.IsActive && !stillAdmin {
+		// Kunci baris admin lain agar dua admin yang saling menurunkan tidak lolos bersamaan.
+		rows, err := tx.Query(ctx,
+			`SELECT id FROM users WHERE role = 'admin' AND is_active AND id <> $1 FOR UPDATE`, id)
+		if err != nil {
+			return nil, nil, err
+		}
+		others, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		if err != nil {
+			return nil, nil, err
+		}
+		if len(others) == 0 {
+			return nil, nil, ErrLastAdmin
+		}
+	}
+
+	after, err = scanUser(tx.QueryRow(ctx,
+		`UPDATE users SET
+		   role = coalesce($2, role),
+		   is_active = coalesce($3, is_active),
+		   password_hash = coalesce($4, password_hash)
+		 WHERE id = $1
+		 RETURNING `+userColumns(""),
+		id, upd.Role, upd.IsActive, upd.PasswordHash))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if (before.IsActive && !after.IsActive) || upd.PasswordHash != nil {
+		if _, err := tx.Exec(ctx, `DELETE FROM sessions WHERE user_id = $1`, id); err != nil {
+			return nil, nil, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, nil, err
+	}
+	return before, after, nil
+}

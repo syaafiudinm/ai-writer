@@ -109,7 +109,7 @@ func newGenEnv(t *testing.T, f *fakeStreamer, edit func(*config.Config, *Deps)) 
 	logger := slog.New(slog.NewJSONHandler(logs, nil))
 	cfg := &config.Config{
 		GeminiModel: "gemini-test", GeminiThinkingLevel: "minimal", SessionTTL: time.Hour,
-		GenerateTimeout: 5 * time.Second,
+		GenerateTimeout: 5 * time.Second, Location: time.UTC,
 	}
 	deps := Deps{
 		Config: cfg, DB: d, Logger: logger,
