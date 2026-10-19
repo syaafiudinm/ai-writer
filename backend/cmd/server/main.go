@@ -39,6 +39,12 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
+	if cfg.StaticDir != "" {
+		if err := api.CheckStaticDir(cfg.StaticDir); err != nil {
+			return fmt.Errorf("STATIC_DIR tidak berisi build frontend: %w", err)
+		}
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 

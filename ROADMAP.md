@@ -150,11 +150,11 @@ Frontend dan API satu origin, jadi tidak perlu CORS dan cookie `SameSite=Lax` la
 - [ ] Sekalian hapus `sessions` yang sudah kedaluwarsa
 
 ### 16. Static + CORS
-- [ ] Sajikan `STATIC_DIR` dengan fallback SPA ke `index.html`
+- [x] Sajikan `STATIC_DIR` dengan fallback SPA ke `index.html` (`internal/api/static.go`; asset ber-hash di-cache immutable, file hilang → 404)
 - [ ] CORS hanya untuk `ALLOWED_ORIGIN` dengan credentials (opsional, untuk jaga-jaga jika FE dipindah ke Cloudflare Pages)
 
 ### 17. Paket, deploy & dokumentasi
-- [ ] `Dockerfile` multi-stage: build React + Go → distroless
+- [x] `Dockerfile` multi-stage: build React + Go → distroless (`STATIC_DIR=/app/web`)
 - [ ] `docker-compose` produksi: Caddy + app + Postgres (Postgres tidak dibuka ke internet)
 - [ ] `Caddyfile`: HTTPS otomatis untuk domain, streaming SSE tanpa buffer, `TRUST_PROXY=true`
 - [ ] Backup Postgres harian (`pg_dump`) ke luar VPS

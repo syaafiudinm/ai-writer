@@ -76,6 +76,12 @@ func NewRouter(d Deps) http.Handler {
 	// Path /api/* yang tidak terdaftar dibalas JSON, bukan halaman 404 bawaan.
 	mux.HandleFunc("/api/", notFound)
 
+	// Build React (satu origin dengan API). Didaftarkan tanpa method karena
+	// "GET /" bentrok dengan "/api/" di ServeMux; method dicek di handler.
+	if d.Config.StaticDir != "" {
+		mux.Handle("/", spaHandler(d.Config.StaticDir))
+	}
+
 	return chain(mux,
 		requestID,
 		clientIP(d.Config.TrustProxy, d.Config.TrustProxyHops),
