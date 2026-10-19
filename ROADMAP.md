@@ -29,7 +29,7 @@ Catatan privasi: free tier Google AI Studio boleh memakai input untuk melatih mo
 ### 1. Config — `internal/config/config.go`
 - [x] Baca semua env + default (`PORT`, `SESSION_TTL`, `GENERATE_TIMEOUT`, dst.)
 - [x] Parse durasi, angka, bool, dan harga per MTok
-- [x] Gagal start jika `ANTHROPIC_API_KEY` atau `DATABASE_URL` kosong
+- [x] Gagal start jika `GEMINI_API_KEY` atau `DATABASE_URL` kosong
 - [x] API key tidak pernah ikut tercetak (`String()` disensor)
 - [x] Unit test (`config_test.go`)
 - [x] `.env.example` berisi semua variabel
@@ -141,16 +141,22 @@ Catatan privasi: free tier Google AI Studio boleh memakai input untuk melatih mo
 
 ## M5 — Siap deploy
 
+Target deploy: **satu VPS, satu domain**. Docker Compose berisi Caddy (HTTPS otomatis) → app Go (API + build React) → Postgres.
+Frontend dan API satu origin, jadi tidak perlu CORS dan cookie `SameSite=Lax` langsung bekerja.
+
 ### 15. Retensi log — `internal/jobs/retention.go`
 - [ ] Job harian hapus `generation_logs` > `LOG_RETENTION_DAYS`
+- [ ] Sekalian hapus `sessions` yang sudah kedaluwarsa
 
 ### 16. Static + CORS
 - [ ] Sajikan `STATIC_DIR` dengan fallback SPA ke `index.html`
-- [ ] CORS hanya untuk `ALLOWED_ORIGIN` dengan credentials
+- [ ] CORS hanya untuk `ALLOWED_ORIGIN` dengan credentials (opsional, untuk jaga-jaga jika FE dipindah ke Cloudflare Pages)
 
-### 17. Paket & dokumentasi
+### 17. Paket, deploy & dokumentasi
 - [ ] `Dockerfile` multi-stage: build React + Go → distroless
-- [ ] Service `app` di `docker-compose.yml`
-- [ ] `README.md`: setup lokal, env, seed, deploy (Cloud Run / Nginx `proxy_buffering off`)
+- [ ] `docker-compose` produksi: Caddy + app + Postgres (Postgres tidak dibuka ke internet)
+- [ ] `Caddyfile`: HTTPS otomatis untuk domain, streaming SSE tanpa buffer, `TRUST_PROXY=true`
+- [ ] Backup Postgres harian (`pg_dump`) ke luar VPS
+- [ ] `README.md`: setup lokal, env, seed, deploy ke VPS, backup & restore
 - [ ] Uji manual 10 brief berita + 10 artikel
 - [ ] AC: API key, password, token sesi, dan `facts` tidak muncul di log maupun response
