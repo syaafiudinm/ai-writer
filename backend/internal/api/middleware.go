@@ -64,23 +64,32 @@ func requestID(next http.Handler) http.Handler {
 	})
 }
 
-func clientIP(trustProxy bool) func(http.Handler) http.Handler {
+func clientIP(trustProxy bool, hops int) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ip := remoteIP(r, trustProxy)
+			ip := remoteIP(r, trustProxy, hops)
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), clientIPKey, ip)))
 		})
 	}
 }
 
-// remoteIP memakai X-Forwarded-For hanya jika TRUST_PROXY aktif. Entri paling
-// kanan yang diambil karena itu ditambahkan proxy kita sendiri (asumsi satu
-// hop: Nginx atau Cloud Run); entri di kirinya bisa dipalsukan klien.
-func remoteIP(r *http.Request, trustProxy bool) string {
-	if trustProxy {
-		if vals := r.Header.Values("X-Forwarded-For"); len(vals) > 0 {
-			parts := strings.Split(vals[len(vals)-1], ",")
-			if ip := strings.TrimSpace(parts[len(parts)-1]); net.ParseIP(ip) != nil {
+// remoteIP memakai X-Forwarded-For hanya jika TRUST_PROXY aktif. Setiap proxy
+// menambahkan alamat pengirimnya di kanan, jadi IP klien ada di entri ke-hops
+// dari kanan (hops = jumlah proxy tepercaya; Caddy/Nginx = 1, Railway = 2).
+// Entri di kirinya bisa dipalsukan klien. Jika entri lebih sedikit dari hops,
+// request tidak lewat jalur proxy yang diharapkan, jadi RemoteAddr yang dipakai.
+func remoteIP(r *http.Request, trustProxy bool, hops int) string {
+	if trustProxy && hops > 0 {
+		var parts []string
+		for _, v := range r.Header.Values("X-Forwarded-For") {
+			for _, p := range strings.Split(v, ",") {
+				if p = strings.TrimSpace(p); p != "" {
+					parts = append(parts, p)
+				}
+			}
+		}
+		if len(parts) >= hops {
+			if ip := parts[len(parts)-hops]; net.ParseIP(ip) != nil {
 				return ip
 			}
 		}
@@ -124,7 +133,9 @@ func (s *statusRecorder) Unwrap() http.ResponseWriter {
 	return s.ResponseWriter
 }
 
-func logRequests(logger *slog.Logger) func(http.Handler) http.Handler {
+// logRequests mencatat setiap request. logProxyHeaders (sementara, untuk
+// diagnosis TRUST_PROXY_HOPS) ikut mencatat header proxy mentah.
+func logRequests(logger *slog.Logger, logProxyHeaders bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
@@ -150,6 +161,12 @@ func logRequests(logger *slog.Logger) func(http.Handler) http.Handler {
 			}
 			if info.userID != "" {
 				attrs = append(attrs, slog.String("user_id", info.userID))
+			}
+			if logProxyHeaders {
+				attrs = append(attrs,
+					slog.String("remote_addr", r.RemoteAddr),
+					slog.String("x_forwarded_for", strings.Join(r.Header.Values("X-Forwarded-For"), " | ")),
+					slog.String("x_real_ip", r.Header.Get("X-Real-IP")))
 			}
 			logger.LogAttrs(r.Context(), level, "request", attrs...)
 		})

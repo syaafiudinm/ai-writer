@@ -34,6 +34,8 @@ func TestLoadDefaults(t *testing.T) {
 		{"StaticDir", cfg.StaticDir, ""},
 		{"AllowedOrigin", cfg.AllowedOrigin, ""},
 		{"TrustProxy", cfg.TrustProxy, false},
+		{"TrustProxyHops", cfg.TrustProxyHops, 1},
+		{"LogProxyHeaders", cfg.LogProxyHeaders, false},
 		{"Timezone", cfg.Timezone, "Asia/Makassar"},
 		{"Location", cfg.Location.String(), "Asia/Makassar"},
 		{"PriceInputPerMTok", cfg.PriceInputPerMTok, 0.0},
@@ -78,6 +80,7 @@ func TestLoadCollectsAllErrors(t *testing.T) {
 		"COOKIE_SECURE":         "ya",
 		"GEMINI_THINKING_LEVEL": "tinggi",
 		"TIMEZONE":              "Indonesia/Makassar",
+		"TRUST_PROXY_HOPS":      "0",
 	}))
 	if err == nil {
 		t.Fatal("harusnya error")
@@ -86,6 +89,7 @@ func TestLoadCollectsAllErrors(t *testing.T) {
 		"GEMINI_API_KEY wajib diisi",
 		"GEMINI_THINKING_LEVEL harus salah satu dari",
 		"TIMEZONE tidak dikenal",
+		"TRUST_PROXY_HOPS harus 1–5",
 		"DATABASE_URL wajib diisi",
 		"SESSION_TTL harus berupa durasi",
 		"RATE_LIMIT_PER_MIN harus lebih dari 0",

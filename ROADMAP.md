@@ -18,6 +18,7 @@ satu modul = satu unit kerja yang bisa dites terpisah.
 | Audit | login, aksi admin | + `login_rate_limited`, `logout` | |
 | Respons login/me | `{id, name, role}` | + `email` | |
 | Env baru | — | `TIMEZONE` (default `Asia/Makassar`) | Batas "hari" di statistik harian |
+| Env baru | `TRUST_PROXY` saja | + `TRUST_PROXY_HOPS` (Caddy = 1, Railway = 2), `LOG_PROXY_HEADERS` (diagnosis sementara) | Railway memakai 2 lapis proxy; tanpa ini IP yang tercatat adalah IP edge Railway |
 | Kode error baru | — | 409 `email_taken`, `self_lockout`, `last_admin`; 404 `not_found` | Kelola user |
 | Audit baru | `user_created`, `user_disabled`, … | + `user_enabled`, `user_role_changed`, `user_password_reset` | |
 | Statistik | jumlah, user aktif, token, biaya, error rate, durasi | + `p50_ttft_ms`, `by_status`; error rate = (error + timeout) / total | Metrik keberhasilan PRD (TTFT p50, ≥ 98% tanpa error) |

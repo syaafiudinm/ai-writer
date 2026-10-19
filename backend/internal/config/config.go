@@ -30,6 +30,8 @@ type Config struct {
 	StaticDir        string
 	AllowedOrigin    string
 	TrustProxy       bool
+	TrustProxyHops   int            // jumlah proxy tepercaya di depan app (Caddy = 1, Railway = 2)
+	LogProxyHeaders  bool           // sementara: catat header proxy mentah untuk diagnosis
 	Timezone         string         // zona waktu pembagian hari di dashboard admin
 	Location         *time.Location // hasil load Timezone
 }
@@ -59,6 +61,8 @@ func load(getenv func(string) string) (*Config, error) {
 		StaticDir:           p.str("STATIC_DIR", ""),
 		AllowedOrigin:       p.str("ALLOWED_ORIGIN", ""),
 		TrustProxy:          p.bool("TRUST_PROXY", false),
+		TrustProxyHops:      p.int("TRUST_PROXY_HOPS", 1),
+		LogProxyHeaders:     p.bool("LOG_PROXY_HEADERS", false),
 		Timezone:            p.str("TIMEZONE", "Asia/Makassar"),
 	}
 
@@ -73,6 +77,7 @@ func load(getenv func(string) string) (*Config, error) {
 	p.check(cfg.SessionTTL > 0, "SESSION_TTL harus lebih dari 0")
 	p.check(cfg.RateLimitPerMin > 0, "RATE_LIMIT_PER_MIN harus lebih dari 0")
 	p.check(cfg.GenerateTimeout > 0, "GENERATE_TIMEOUT harus lebih dari 0")
+	p.check(cfg.TrustProxyHops >= 1 && cfg.TrustProxyHops <= 5, "TRUST_PROXY_HOPS harus 1–5")
 	p.check(cfg.LogRetentionDays > 0, "LOG_RETENTION_DAYS harus lebih dari 0")
 
 	if err := errors.Join(p.errs...); err != nil {

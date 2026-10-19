@@ -78,8 +78,8 @@ func NewRouter(d Deps) http.Handler {
 
 	return chain(mux,
 		requestID,
-		clientIP(d.Config.TrustProxy),
-		logRequests(d.Logger),
+		clientIP(d.Config.TrustProxy, d.Config.TrustProxyHops),
+		logRequests(d.Logger, d.Config.LogProxyHeaders),
 		recoverPanic(d.Logger),
 		requireFetchHeader,
 		limitBody,

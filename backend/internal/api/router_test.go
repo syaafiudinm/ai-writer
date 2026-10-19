@@ -55,7 +55,7 @@ func TestMiddlewareChain(t *testing.T) {
 			t.Errorf("flush lewat middleware gagal: %v", err)
 		}
 	})
-	h := chain(mux, requestID, logRequests(discard), recoverPanic(discard))
+	h := chain(mux, requestID, logRequests(discard, false), recoverPanic(discard))
 
 	t.Run("request id", func(t *testing.T) {
 		rec := httptest.NewRecorder()
@@ -83,14 +83,18 @@ func TestRemoteIP(t *testing.T) {
 	tests := []struct {
 		name  string
 		trust bool
+		hops  int
 		xff   []string
 		want  string
 	}{
-		{"tanpa proxy abaikan XFF", false, []string{"9.9.9.9"}, "10.0.0.1"},
-		{"proxy: entri paling kanan", true, []string{"6.6.6.6, 203.0.113.7"}, "203.0.113.7"},
-		{"proxy: beberapa header", true, []string{"6.6.6.6", "203.0.113.8"}, "203.0.113.8"},
-		{"proxy: XFF sampah", true, []string{"bukan-ip"}, "10.0.0.1"},
-		{"proxy: tanpa XFF", true, nil, "10.0.0.1"},
+		{"tanpa proxy abaikan XFF", false, 1, []string{"9.9.9.9"}, "10.0.0.1"},
+		{"1 hop: entri paling kanan", true, 1, []string{"6.6.6.6, 203.0.113.7"}, "203.0.113.7"},
+		{"1 hop: beberapa header", true, 1, []string{"6.6.6.6", "203.0.113.8"}, "203.0.113.8"},
+		{"Railway 2 hop: klien sebelum IP edge", true, 2, []string{"125.162.209.138, 152.233.68.98"}, "125.162.209.138"},
+		{"Railway 2 hop: XFF palsu di kiri diabaikan", true, 2, []string{"6.6.6.6, 125.162.209.138, 152.233.15.123"}, "125.162.209.138"},
+		{"2 hop tapi entri kurang → RemoteAddr", true, 2, []string{"6.6.6.6"}, "10.0.0.1"},
+		{"proxy: XFF sampah", true, 1, []string{"bukan-ip"}, "10.0.0.1"},
+		{"proxy: tanpa XFF", true, 1, nil, "10.0.0.1"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -99,7 +103,7 @@ func TestRemoteIP(t *testing.T) {
 			for _, v := range tt.xff {
 				r.Header.Add("X-Forwarded-For", v)
 			}
-			if got := remoteIP(r, tt.trust); got != tt.want {
+			if got := remoteIP(r, tt.trust, tt.hops); got != tt.want {
 				t.Errorf("remoteIP = %q, want %q", got, tt.want)
 			}
 		})
